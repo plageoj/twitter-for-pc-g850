@@ -37,16 +37,22 @@ void GPRINT::flowControl()
     delay(10);
 }
 
-int GPRINT::gprint(String utf8)
+void GPRINT::clearBuffer()
+{
+    HWSerial.println();
+    HWSerial.readStringUntil('-');
+}
+
+void GPRINT::gprint(String utf8)
 {
     uint8_t gpbuf[280][8] = {};
+    int prevMode = TEXT_MODE;
     utf8.replace("\n", "");
     const char *cpt = utf8.c_str();
-    int prevMode = TEXT_MODE;
+    uint8_t outlen;
 #ifdef DEBUG
     Serial.println(utf8);
 #endif
-    uint8_t outlen;
     while (*cpt)
     {
         // マルチバイト文字を検出する
@@ -70,7 +76,7 @@ int GPRINT::gprint(String utf8)
             flowControl();
             if (prevMode != KNJI_MODE)
             {
-                HWSerial.println("\n\xe3"); // グラフィックモード
+                HWSerial.println("\n\xe3");
                 prevMode = KNJI_MODE;
             }
             for (int i = 0; i < len; i++)
@@ -94,15 +100,19 @@ int GPRINT::gprint(String utf8)
                         HWSerial.print(rtbuf >> 4, HEX);
                         HWSerial.print(rtbuf & 15, HEX);
 
+#ifdef DEBUG
                         Serial.print(rtbuf >> 4, HEX);
                         Serial.print(rtbuf & 15, HEX);
+#endif
                         outlen++;
                     }
                 }
                 // 母艦バッファをクリアするために改行を送出
                 if (outlen)
                 {
+#ifdef DEBUG
                     Serial.println();
+#endif
                     HWSerial.println();
                     flowControl();
                 }
@@ -150,25 +160,28 @@ int GPRINT::gprint(String utf8)
 
             if (outlen > 22)
             {
-                HWSerial.println();
                 outlen = 0;
-                HWSerial.readStringUntil('-');
+                clearBuffer();
             }
             flowControl();
         }
         if (outlen)
-        {
-            HWSerial.println();
-            HWSerial.readStringUntil('-');
-        }
+            clearBuffer();
 
-        if (prevMode != TEXT_MODE)
+        // シングルバイト文字を書き出す
+        if (*cpt && *cpt < 0x80)
         {
-            HWSerial.println("\n\xe2"); // テキストモード
-            prevMode = TEXT_MODE;
+            if (prevMode != TEXT_MODE)
+            {
+                HWSerial.println("\n\xe2");
+                prevMode = TEXT_MODE;
+            }
+            cpt += putSingleByteChar(cpt);
         }
-        cpt += putSingleByteChar(cpt);
     }
+
+    HWSerial.flush();
+    return;
 }
 
 int GPRINT::putSingleByteChar(const char *str)
@@ -182,15 +195,11 @@ int GPRINT::putSingleByteChar(const char *str)
         outlen++;
         if (outlen % 150 == 0)
         {
-            HWSerial.println();
-            HWSerial.readStringUntil('-');
+            clearBuffer();
         }
     }
-    if (outlen)
-    {
-        HWSerial.println();
-        HWSerial.readStringUntil('-');
-    }
+    if (outlen % 150)
+        clearBuffer();
     flowControl();
 
     return outlen;
@@ -210,17 +219,17 @@ String GPRINT::htzConvert(String text)
         {
             hiramode = !hiramode;
         }
-        else if (r >= 0xa1 && r <= 0xdf) // 仮名エリア
+        else if (r >= 0xa1 && r <= 0xdf) // 仮名
         {
             uint32_t adr = (r - 0xa1) * 3 + (hiramode ? 0xc1 : 1);
             htz.seek(adr);
             htz.readBytes(buf, 3);
 
-            switch (text.charAt(pos + 1))
+            switch (text.charAt(pos + 1)) // 次の文字が
             {
-            case 0xdf:
+            case 0xdf: // 半濁点
                 buf[2]++;
-            case 0xde:
+            case 0xde: // 濁点
                 buf[2]++;
                 pos++;
             }
@@ -233,7 +242,9 @@ String GPRINT::htzConvert(String text)
         pos++;
     }
 
+#ifdef DEBUG
     Serial.println();
     Serial.println(ret);
+#endif
     return ret;
 }

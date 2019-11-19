@@ -9,6 +9,7 @@
 #include <cassert>
 #include <locale>
 
+#include "UrlEncode.cpp"
 #include "TwitterLib.h"
 
 #define SHA1_SIZE 20
@@ -97,7 +98,7 @@ void Twitter::search(uint32_t timestamp, const char *query, Tweet *timeline)
   base_URI = "/1.1/search/tweets.json";
   key_entities = "include_entities";
   key_woeid = "q";
-  TwitterAPI_HTTP_Request(timestamp, URLEncode(query).c_str(), timeline);
+  TwitterAPI_HTTP_Request(timestamp, urlEncode(query).c_str(), timeline);
 }
 
 void Twitter::post(uint32_t timestamp, const char *status)
@@ -106,7 +107,7 @@ void Twitter::post(uint32_t timestamp, const char *status)
   base_URL = "https://api.twitter.com/1.1/statuses/update.json";
   base_URI = "/1.1/statuses/update.json";
   key_woeid = "status";
-  TwitterAPI_HTTP_Request(timestamp, URLEncode(status).c_str(), NULL);
+  TwitterAPI_HTTP_Request(timestamp, urlEncode(status).c_str(), NULL);
 }
 
 void Twitter::TwitterAPI_HTTP_Request(uint32_t value_timestamp, const char *screen_name, Tweet *timeline)
@@ -142,7 +143,7 @@ void Twitter::TwitterAPI_HTTP_Request(uint32_t value_timestamp, const char *scre
     String str02 = "Authorization: " + OAuth_header + "\r\n";
     str02 += "Connection: close\r\n";
     str02 += "Content-Length: 0\r\n";
-    str02 += "Content-Type: application/x-www-form-urlencoded\r\n";
+    str02 += "Content-Type: application/x-www-form-urlEncoded\r\n";
     str02 += "Host: " + String(base_host) + "\r\n\r\n";
 
     client.print(str01);
@@ -300,9 +301,9 @@ String Twitter::make_sign_base_str(String parameter_str)
 {
   String sign_base_str = key_http_method;
   sign_base_str += "&";
-  sign_base_str += URLEncode(base_URL);
+  sign_base_str += urlEncode(base_URL);
   sign_base_str += "&";
-  sign_base_str += URLEncode(parameter_str.c_str());
+  sign_base_str += urlEncode(parameter_str.c_str());
 #ifdef DEBUG
   Serial.print(F("sign_base_str = "));
   Serial.println(sign_base_str);
@@ -312,9 +313,9 @@ String Twitter::make_sign_base_str(String parameter_str)
 //*************************************************
 String Twitter::make_signature(const char *secret_one, const char *secret_two, String sign_base_str)
 {
-  String signing_key = URLEncode(secret_one);
+  String signing_key = urlEncode(secret_one);
   signing_key += "&";
-  signing_key += URLEncode(secret_two);
+  signing_key += urlEncode(secret_two);
 #ifdef DEBUG
   Serial.print(F("signing_key = "));
   Serial.println(signing_key);
@@ -330,7 +331,7 @@ String Twitter::make_signature(const char *secret_one, const char *secret_two, S
   uint8_t digest[32];
   ssl_hmac_sha1((uint8_t *)sign_base_str.c_str(), (int)sign_base_str.length(), digestkey, SHA1_SIZE, digest);
 
-  String oauth_signature = URLEncode(base64::encode(digest, SHA1_SIZE).c_str());
+  String oauth_signature = urlEncode(base64::encode(digest, SHA1_SIZE).c_str());
 #ifdef DEBUG
   Serial.print(F("oauth_signature = "));
   Serial.println(oauth_signature);
@@ -381,30 +382,6 @@ String Twitter::make_OAuth_header(String oauth_signature, uint32_t value_nonce, 
   OAuth_header += woeid;
   OAuth_header += "\"";
   return OAuth_header;
-}
-//*************************************************
-// Reference: http://hardwarefun.com/tutorials/url-encoding-in-arduino
-// modified by chaeplin
-String Twitter::URLEncode(const char *msg)
-{
-  const char *hex = "0123456789ABCDEF";
-  String encodedMsg = "";
-
-  while (*msg != '\0')
-  {
-    if (('a' <= *msg && *msg <= 'z') || ('A' <= *msg && *msg <= 'Z') || ('0' <= *msg && *msg <= '9') || *msg == '-' || *msg == '_' || *msg == '.' || *msg == '~')
-    {
-      encodedMsg += *msg;
-    }
-    else
-    {
-      encodedMsg += '%';
-      encodedMsg += hex[*msg >> 4];
-      encodedMsg += hex[*msg & 0xf];
-    }
-    msg++;
-  }
-  return encodedMsg;
 }
 //*************************************************
 //Reference: https://github.com/igrr/axtls-8266/blob/master/crypto/hmac.c

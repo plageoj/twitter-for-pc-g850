@@ -35,8 +35,8 @@ public:
  * @param text 変換する文字列
  * @returns 出力した文字数
  */
-    int gprint(String text);
-    int gprint(char *text)
+    void gprint(String text);
+    void gprint(char *text)
     {
         return gprint(String(text));
     }
@@ -57,6 +57,10 @@ private:
  * XOFFがあるまで関数を return しない
  */
     void flowControl();
+    /**
+     * ポケコン側のバッファクリアを待つ
+     */
+    void clearBuffer();
     /**
      * シングルバイト文字をダイレクトモードで書き出す
      * @returns 出力した文字数

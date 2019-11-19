@@ -1,13 +1,12 @@
 #include <Arduino.h>
-#include <WiFiClientSecure.h>
 #include <WiFiMulti.h>
 #include <TimeLib.h>
 #include <Preferences.h>
 
 #include "NTP.cpp"
 #include <TwitterLib.h>
-
 #include <GPRINT.h>
+#include <KINPUT.h>
 
 #define PWRLED 25
 #define ERRLED 33
@@ -17,6 +16,11 @@ WiFiMulti wifiMulti;
 
 // ツイート取得件数
 #define Display_MaxData 15
+// 最大同時変換文節
+#define Max_Segments 15
+
+#define GP_NL '\xf0'
+#define GP_END '\xee'
 
 HardwareSerial HWSerial(1);
 Preferences pref;
@@ -30,9 +34,10 @@ GPRINT gp;
 void renderTweet(Twitter::Tweet *tweet)
 {
   gp.gprint(tweet->name);
-  HWSerial.println('\xf0'); // NL
+  HWSerial.println("\xe2"); // テキストモード
+  HWSerial.println(GP_NL);
   gp.gprint(tweet->text);
-  HWSerial.println('\xee'); // END
+  HWSerial.println(GP_END);
   HWSerial.flush();
 }
 
@@ -79,6 +84,53 @@ void setAuthInfo()
   pref.putString("access_secret", readLineFromSerial());
 
   Serial.println(F("\nALL SET!\nNow proceeding to the normal startup…"));
+}
+
+String readString()
+{
+  String sjis, ret = "", delta;
+  HWSerial.flush();
+  while (1)
+  {
+    while (!HWSerial.available())
+      ;
+    sjis = HWSerial.readStringUntil('\r');
+    if (sjis.isEmpty() || sjis.startsWith("-"))
+    {
+      Serial.println(ret);
+      return ret;
+    }
+    ConversionResult segment[Max_Segments];
+    convertJapanese(gp.htzConvert(sjis), segment);
+    int maxCandidates = 0;
+    for (int i = 0; i < Max_Segments && !segment[i].yomi.isEmpty(); i++)
+    {
+      HWSerial.println('-');
+      for (int j = 0; j < 5 && !segment[i].candidates[j].isEmpty(); j++)
+      {
+        gp.gprint(String(j + 1) + segment[i].candidates[j]);
+        HWSerial.println('\xe2'); // テキストモード
+        HWSerial.println(GP_NL);
+        maxCandidates = j + 1;
+      }
+      gp.gprint("#1-" + String(maxCandidates) + "? ");
+      HWSerial.println(GP_END);
+
+      while (!HWSerial.available())
+        ;
+      int selectedCandidate = HWSerial.read();
+      HWSerial.flush();
+      if (selectedCandidate == '-')
+        return "";
+      selectedCandidate -= '0';
+      if (selectedCandidate > 0 && selectedCandidate <= maxCandidates)
+      {
+        delta = segment[i].candidates[selectedCandidate - 1];
+        ret += delta;
+      }
+    }
+    HWSerial.println(GP_END);
+  }
 }
 
 void setup()
@@ -151,6 +203,7 @@ void loop()
   String command;
   static Twitter::Tweet timeline[Display_MaxData];
   static uint8_t currentTweet = 0;
+
   while (Serial.available())
   {
     gp.gprint(Serial.readStringUntil('\n'));
@@ -171,22 +224,21 @@ void loop()
       return;
     }
 
-    // ツイート
-    if (command.startsWith("N"))
-    {
-      command = gp.htzConvert(command.substring(1)) + " #G850Tw";
-      tw.post(now(), command.c_str());
-      HWSerial.println("\xee\n-"); // END
-      return;
-    }
-
     // ツイート検索
     if (command.startsWith("/"))
     {
-      command = gp.htzConvert(command.substring(1));
-      tw.search(now(), command.c_str(), timeline);
-      currentTweet = 0;
-      renderTweet(timeline);
+      String text = readString();
+      if (!text.isEmpty())
+      {
+        tw.search(now(), text.c_str(), timeline);
+        currentTweet = 0;
+        renderTweet(timeline);
+      }
+      else
+      {
+        gp.gprint(F("検索ワードを入力してください"));
+        HWSerial.println(GP_END);
+      }
       return;
     }
 
@@ -201,7 +253,7 @@ void loop()
       else
       {
         gp.gprint(F("取得件数外です"));
-        HWSerial.println("\xee\n-"); // END
+        HWSerial.println(GP_END);
       }
       return;
     }
@@ -217,8 +269,21 @@ void loop()
       else
       {
         gp.gprint(F("これ以前のツイートはありません"));
-        HWSerial.println("\xee\n-"); // END
+        HWSerial.println(GP_END);
       }
+      return;
+    }
+
+    // ツイート
+    if (command.startsWith("N"))
+    {
+      String text = readString();
+      if (!text.isEmpty())
+      {
+        command = text + " #G850Tw";
+        tw.post(now(), command.c_str());
+      }
+      HWSerial.println(GP_END);
       return;
     }
 

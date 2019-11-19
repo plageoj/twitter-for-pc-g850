@@ -2,7 +2,6 @@
 
 #ifndef ESP32_TWITTER_LIB
 #define ESP32_TWITTER_LIB
-
 class Twitter
 {
 public:
@@ -25,7 +24,6 @@ private:
   String make_sign_base_str(String);
   String make_signature(const char *, const char *, String);
   String make_OAuth_header(String, uint32_t, uint32_t);
-  String URLEncode(const char *);
   void ssl_hmac_sha1(uint8_t *, int, const uint8_t *, int, unsigned char *);
   String UTF16toUTF8(String str);
   std::string utf16_to_utf8(std::u16string const &);
