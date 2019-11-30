@@ -1,9 +1,12 @@
+#ifndef G850_GPRINT_H_INCLUDED
+#define G850_GPRINT_H_INCLUDED
+
 #include <Arduino.h>
 #include <SPIFFS.h>
 #include <ESP32_SPIFFS_MisakiFNT.h>
 
-#ifndef G850_GPRINT_H_INCLUDED
-#define G850_GPRINT_H_INCLUDED
+#define GP_NL '\xf0'
+#define GP_END '\xee'
 
 class GPRINT
 {
@@ -19,10 +22,10 @@ public:
  *
  * @returns ファイルが開ければ true
  */
-    bool begin(const char *ujistable, const char *hanfont, const char *zenfont, const char *zthtable, const char *htztable);
+    bool begin(const char *ujistable, const char *hanfont, const char *zenfont, const char *zthtable);
     bool begin(const char *ujistable, const char *hanfont, const char *zenfont)
     {
-        return begin(ujistable, hanfont, zenfont, "/zth.tbl", "/htz.tbl");
+        return begin(ujistable, hanfont, zenfont, "/zth.tbl");
     }
     bool begin()
     {
@@ -33,22 +36,12 @@ public:
  * HEXとしてシリアルに送出する
  *
  * @param text 変換する文字列
- * @returns 出力した文字数
  */
     void gprint(String text);
     void gprint(char *text)
     {
         return gprint(String(text));
     }
-
-    /**
-     * SJISの半角カナをUTF-8の全角カナに変換する
-     * ひらがな/カタカナモードは長音で切り替え
-     * デフォルトはひらがな
-     * @param text 半角カナまじり文
-     * @returns 全角カナまじり文
-     */
-    String htzConvert(String text);
 
 private:
     /**

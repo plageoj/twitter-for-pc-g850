@@ -101,12 +101,21 @@ void Twitter::search(uint32_t timestamp, const char *query, Tweet *timeline)
   TwitterAPI_HTTP_Request(timestamp, urlEncode(query).c_str(), timeline);
 }
 
-void Twitter::post(uint32_t timestamp, const char *status)
+void Twitter::post(uint32_t timestamp, const char *status, Tweet *replyTo)
 {
   key_http_method = "POST";
   base_URL = "https://api.twitter.com/1.1/statuses/update.json";
   base_URI = "/1.1/statuses/update.json";
-  key_woeid = "status";
+  if (replyTo == NULL)
+  {
+    key_woeid = "status";
+  }
+  else
+  {
+    String reply = "in_reply_to_status_id=";
+    key_woeid = (reply + replyTo->tweetId + "&status").c_str();
+    status = ("@" + replyTo->userScreenName + " " + String(status)).c_str();
+  }
   TwitterAPI_HTTP_Request(timestamp, urlEncode(status).c_str(), NULL);
 }
 
@@ -157,10 +166,6 @@ void Twitter::TwitterAPI_HTTP_Request(uint32_t value_timestamp, const char *scre
 
     String res_str = "";
 
-    String id_begin_str = "\"id\":";
-    String name_begin_str = "\"name\":\"";
-    String text_begin_str = "\"text\":\"";
-    String fav_begin_str = "\"favorite_count\":";
     uint16_t iter = 0, dataset;
 #ifdef DEBUG
     Serial.println(F("--------------------HTTP Response"));
@@ -193,7 +198,7 @@ void Twitter::TwitterAPI_HTTP_Request(uint32_t value_timestamp, const char *scre
 #endif
               if (iter >= Display_MaxData)
                 break;
-              if (res_str.startsWith(name_begin_str))
+              if (res_str.startsWith("\"name\":\""))
               {
                 while (res_str[res_str.length() - 1] != '"')
                 {
@@ -205,7 +210,7 @@ void Twitter::TwitterAPI_HTTP_Request(uint32_t value_timestamp, const char *scre
                 timeline[iter].name = UTF16toUTF8(res_str);
                 dataset |= 1;
               }
-              else if (res_str.startsWith(text_begin_str))
+              else if ((dataset & 2) == 0 && res_str.startsWith("\"text\":\""))
               {
                 while (res_str[res_str.length() - 1] != '"')
                 {
@@ -218,15 +223,23 @@ void Twitter::TwitterAPI_HTTP_Request(uint32_t value_timestamp, const char *scre
                 timeline[iter].text = res_str;
                 dataset |= 2;
               }
-              else if (res_str.startsWith(id_begin_str))
+              else if ((dataset & 4) == 0 && res_str.startsWith("\"id_str\":"))
               {
-                res_str.remove(0, 5);
-                timeline[iter].id = res_str.toInt();
+                res_str.remove(0, 10);
+                res_str.remove(res_str.length() - 1);
+                timeline[iter].tweetId = res_str;
                 dataset |= 4;
               }
-              else if (res_str.startsWith(fav_begin_str))
+              else if (res_str.startsWith("\"screen_name\":"))
               {
-                if (dataset == 7)
+                res_str.remove(0, 15);
+                res_str.remove(res_str.length() - 1);
+                timeline[iter].userScreenName = res_str;
+                dataset |= 8;
+              }
+              else if (res_str.startsWith("\"favorite_count\":"))
+              {
+                if (dataset == 15)
                 {
                   iter++;
                   dataset = 0;
@@ -263,33 +276,19 @@ String Twitter::make_parameter_str(String status_all, uint32_t value_nonce, uint
     parameter_str += value_entities;
     parameter_str += "&";
   }
-  parameter_str += key_consumer_key;
-  parameter_str += "=";
-  parameter_str += consumer_key;
+  parameter_str += String(key_consumer_key) + "=" + consumer_key;
   parameter_str += "&";
-  parameter_str += key_nonce;
-  parameter_str += "=";
-  parameter_str += value_nonce;
+  parameter_str += String(key_nonce) + "=" + value_nonce;
   parameter_str += "&";
-  parameter_str += key_signature_method;
-  parameter_str += "=";
-  parameter_str += value_signature_method;
+  parameter_str += String(key_signature_method) + "=" + value_signature_method;
   parameter_str += "&";
-  parameter_str += key_timestamp;
-  parameter_str += "=";
-  parameter_str += value_timestamp;
+  parameter_str += String(key_timestamp) + "=" + value_timestamp;
   parameter_str += "&";
-  parameter_str += key_token;
-  parameter_str += "=";
-  parameter_str += access_token;
+  parameter_str += String(key_token) + "=" + access_token;
   parameter_str += "&";
-  parameter_str += key_version;
-  parameter_str += "=";
-  parameter_str += value_version;
+  parameter_str += String(key_version) + "=" + value_version;
   parameter_str += "&";
-  parameter_str += key_woeid;
-  parameter_str += "=";
-  parameter_str += woeid;
+  parameter_str += String(key_woeid) + "=" + woeid;
 #ifdef DEBUG
   Serial.print(F("parameter_str:  "));
   Serial.println(parameter_str);
@@ -300,10 +299,8 @@ String Twitter::make_parameter_str(String status_all, uint32_t value_nonce, uint
 String Twitter::make_sign_base_str(String parameter_str)
 {
   String sign_base_str = key_http_method;
-  sign_base_str += "&";
-  sign_base_str += urlEncode(base_URL);
-  sign_base_str += "&";
-  sign_base_str += urlEncode(parameter_str.c_str());
+  sign_base_str += "&" + urlEncode(base_URL);
+  sign_base_str += "&" + urlEncode(parameter_str.c_str());
 #ifdef DEBUG
   Serial.print(F("sign_base_str = "));
   Serial.println(sign_base_str);

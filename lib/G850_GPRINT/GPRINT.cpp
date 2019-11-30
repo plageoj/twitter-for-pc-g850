@@ -5,20 +5,17 @@
 
 ESP32_SPIFFS_MisakiFNT misaki;
 extern HardwareSerial HWSerial;
-File zth, htz;
+File zth;
 
 #define TEXT_MODE 0
 #define HIRA_MODE 1
 #define KNJI_MODE 2
 
-bool GPRINT::begin(const char *ujistable, const char *hanfont, const char *zenfont, const char *zthtable, const char *htztable)
+bool GPRINT::begin(const char *ujistable, const char *hanfont, const char *zenfont, const char *zthtable)
 {
     bool misakiresult = misaki.SPIFFS_Misaki_Init3F(ujistable, hanfont, zenfont);
-
     zth = SPIFFS.open(zthtable, "r");
-    htz = SPIFFS.open(htztable, "r");
-
-    return zth && htz && misakiresult;
+    return zth && misakiresult;
 }
 
 void GPRINT::flowControl()
@@ -115,6 +112,10 @@ void GPRINT::gprint(String utf8)
 #endif
                     HWSerial.println();
                     flowControl();
+                    if (i % 4 == 3)
+                    {
+                        clearBuffer();
+                    }
                 }
             }
         }
@@ -203,48 +204,4 @@ int GPRINT::putSingleByteChar(const char *str)
     flowControl();
 
     return outlen;
-}
-
-String GPRINT::htzConvert(String text)
-{
-    bool hiramode = true;
-    unsigned int pos = 0, len = text.length();
-    char buf[4] = "";
-    String ret = "";
-
-    while (len - pos)
-    {
-        char r = text.charAt(pos);
-        if (r == 248) // 秒記号 ′′
-        {
-            hiramode = !hiramode;
-        }
-        else if (r >= 0xa1 && r <= 0xdf) // 仮名
-        {
-            uint32_t adr = (r - 0xa1) * 3 + (hiramode ? 0xc1 : 1);
-            htz.seek(adr);
-            htz.readBytes(buf, 3);
-
-            switch (text.charAt(pos + 1)) // 次の文字が
-            {
-            case 0xdf: // 半濁点
-                buf[2]++;
-            case 0xde: // 濁点
-                buf[2]++;
-                pos++;
-            }
-            ret.concat(buf);
-        }
-        else
-        {
-            ret.concat(r);
-        }
-        pos++;
-    }
-
-#ifdef DEBUG
-    Serial.println();
-    Serial.println(ret);
-#endif
-    return ret;
 }

@@ -7,7 +7,8 @@ class Twitter
 public:
   struct Tweet
   {
-    uint32_t id;
+    String tweetId;
+    String userScreenName;
     String name;
     String text;
   };
@@ -16,7 +17,11 @@ public:
   void begin(const char *, const char *, const char *, const char *);
   void getUserTimeline(uint32_t, const char *, Tweet *);
   void search(uint32_t, const char *, Tweet *);
-  void post(uint32_t, const char*);
+  void post(uint32_t, const char *, Tweet *);
+  void post(uint32_t timestamp, const char *status)
+  {
+    return post(timestamp, status, NULL);
+  }
 
 private:
   void TwitterAPI_HTTP_Request(uint32_t, const char *, Tweet *);

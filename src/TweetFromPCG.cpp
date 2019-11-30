@@ -11,6 +11,7 @@
 #define PWRLED 25
 #define ERRLED 33
 #define BUZZER 32
+#define DIPSW 34
 
 WiFiMulti wifiMulti;
 
@@ -19,13 +20,11 @@ WiFiMulti wifiMulti;
 // 最大同時変換文節
 #define Max_Segments 15
 
-#define GP_NL '\xf0'
-#define GP_END '\xee'
-
 HardwareSerial HWSerial(1);
 Preferences pref;
 Twitter tw;
 GPRINT gp;
+KINPUT kanji(Max_Segments);
 
 /**
  * 与えられたツイートを描画する
@@ -39,6 +38,10 @@ void renderTweet(Twitter::Tweet *tweet)
   gp.gprint(tweet->text);
   HWSerial.println(GP_END);
   HWSerial.flush();
+
+  Serial.print('@');
+  Serial.println(tweet->userScreenName);
+  Serial.println(tweet->tweetId);
 }
 
 /**
@@ -59,6 +62,10 @@ void setNetwork(String command)
   ESP.restart();
 }
 
+/**
+ * シリアルから入力があるまで待ち、１行読み取る
+ * @returns 読み取った文字列
+ */
 String readLineFromSerial()
 {
   Serial.flush();
@@ -69,6 +76,9 @@ String readLineFromSerial()
   return ret;
 }
 
+/**
+ * ポケコンからWi-Fi接続情報を設定する
+ */
 void setAuthInfo()
 {
   Serial.print(F("Consumer key: "));
@@ -86,74 +96,28 @@ void setAuthInfo()
   Serial.println(F("\nALL SET!\nNow proceeding to the normal startup…"));
 }
 
-String readString()
-{
-  String sjis, ret = "", delta;
-  HWSerial.flush();
-  while (1)
-  {
-    while (!HWSerial.available())
-      ;
-    sjis = HWSerial.readStringUntil('\r');
-    if (sjis.isEmpty() || sjis.startsWith("-"))
-    {
-      Serial.println(ret);
-      return ret;
-    }
-    ConversionResult segment[Max_Segments];
-    convertJapanese(gp.htzConvert(sjis), segment);
-    int maxCandidates = 0;
-    for (int i = 0; i < Max_Segments && !segment[i].yomi.isEmpty(); i++)
-    {
-      HWSerial.println('-');
-      for (int j = 0; j < 5 && !segment[i].candidates[j].isEmpty(); j++)
-      {
-        gp.gprint(String(j + 1) + segment[i].candidates[j]);
-        HWSerial.println('\xe2'); // テキストモード
-        HWSerial.println(GP_NL);
-        maxCandidates = j + 1;
-      }
-      gp.gprint("#1-" + String(maxCandidates) + "? ");
-      HWSerial.println(GP_END);
-
-      while (!HWSerial.available())
-        ;
-      int selectedCandidate = HWSerial.read();
-      HWSerial.flush();
-      if (selectedCandidate == '-')
-        return "";
-      selectedCandidate -= '0';
-      if (selectedCandidate > 0 && selectedCandidate <= maxCandidates)
-      {
-        delta = segment[i].candidates[selectedCandidate - 1];
-        ret += delta;
-      }
-    }
-    HWSerial.println(GP_END);
-  }
-}
-
 void setup()
 {
   pinMode(PWRLED, OUTPUT);
   pinMode(ERRLED, OUTPUT);
+  pinMode(DIPSW, INPUT_PULLUP);
   digitalWrite(PWRLED, HIGH);
   digitalWrite(ERRLED, HIGH);
 
   Serial.begin(115200);
   HWSerial.begin(9600, SERIAL_8N1, GPIO_NUM_27, GPIO_NUM_14, true);
 
-  Serial.println(ESP.getFlashChipSize());
-
   pref.begin("G850TW");
   Serial.print(F("Connecting "));
   Serial.print(pref.getString("ssid"));
   Serial.print(F(" with password "));
   Serial.println(pref.getString("password", ""));
-  wifiMulti.addAP(pref.getString("ssid").c_str(), pref.getString("password", "").c_str());
+  // wifiMulti.addAP(pref.getString("ssid").c_str(), pref.getString("password", "").c_str());
+  wifiMulti.addAP("Intel-CP-3507", "ububuntu");
 
   bool connOut = false;
   digitalWrite(PWRLED, connOut);
+  HWSerial.flush();
 
   while (wifiMulti.run() != WL_CONNECTED)
   {
@@ -191,7 +155,9 @@ void setup()
       pref.getString("consumer_secret").c_str(),
       pref.getString("access_token").c_str(),
       pref.getString("access_secret").c_str());
+  //SPIFFSの都合上必ずGP->kanjiの順でロードせよ
   gp.begin();
+  kanji.begin();
 
   digitalWrite(PWRLED, HIGH);
   digitalWrite(ERRLED, LOW);
@@ -227,7 +193,7 @@ void loop()
     // ツイート検索
     if (command.startsWith("/"))
     {
-      String text = readString();
+      String text = kanji.readString();
       if (!text.isEmpty())
       {
         tw.search(now(), text.c_str(), timeline);
@@ -277,11 +243,43 @@ void loop()
     // ツイート
     if (command.startsWith("N"))
     {
-      String text = readString();
+      String text;
+      if (digitalRead(DIPSW) == HIGH)
+      {
+        text = kanji.readString();
+      }
+      else
+      {
+        HWSerial.flush();
+        while (!HWSerial.available())
+          ;
+        text = kanji.convertJapanese(kanji.htzConvert(HWSerial.readStringUntil('\r')), NULL);
+        Serial.println(text);
+      }
       if (!text.isEmpty())
       {
-        command = text + " #G850Tw";
+        command = text + " #ALGYAN #つくるよ #G850Tw";
         tw.post(now(), command.c_str());
+      }
+      HWSerial.println(GP_END);
+      return;
+    }
+
+    // リプライ
+    if (command.startsWith("R"))
+    {
+      String text = kanji.readString();
+      if (!text.isEmpty())
+      {
+        command = text + " #ALGYAN #つくるよ #G850Tw";
+        if (timeline[currentTweet].tweetId)
+        {
+          tw.post(now(), command.c_str(), timeline + currentTweet);
+        }
+        else
+        {
+          tw.post(now(), command.c_str());
+        }
       }
       HWSerial.println(GP_END);
       return;
