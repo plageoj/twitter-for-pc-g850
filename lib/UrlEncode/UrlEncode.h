@@ -1,5 +1,5 @@
-#ifndef URLENCODE_H_INCL
-#define URLENCODE_H_INCL
+#ifndef _URLENCODE_H_INCL
+#define _URLENCODE_H_INCL
 
 #include <Arduino.h>
 
@@ -8,8 +8,8 @@
  * @param txt UTF-8文字列
  * @returns エンコード後の ASCII 文字列
  */
-String urlEncode(const char *txt);
-String urlEncode(String msg)
+inline String urlEncode(const char *txt);
+inline String urlEncode(String msg)
 {
     return urlEncode(msg.c_str());
 }

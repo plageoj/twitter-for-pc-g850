@@ -1,9 +1,9 @@
 #include <Arduino.h>
 #include <WiFiClient.h>
-#include <UrlEncode.h>
 #include <SPIFFS.h>
 #include <GPRINT.h>
 #include "KINPUT.h"
+#include "UrlEncode.h"
 
 WiFiClient client;
 extern HardwareSerial HWSerial;
@@ -43,9 +43,11 @@ String KINPUT::convertJapanese(String hiragana, ConversionResult *resultSet)
         client.readStringUntil('"');
 
         String rbuf = client.readStringUntil('"');
+        String ybuf = rbuf;
 #ifdef DEBUG
         Serial.println(rbuf);
 #endif
+        char beginning = ybuf[0];
 
         if (resultSet != NULL && segment < Max_Segments)
         {
@@ -66,7 +68,14 @@ String KINPUT::convertJapanese(String hiragana, ConversionResult *resultSet)
             }
             if (i == 0)
             {
-                ret += rbuf;
+                if ((beginning >= '0' && beginning <= '9') || beginning == '#' || beginning == '@')
+                {
+                    ret += ybuf;
+                }
+                else
+                {
+                    ret += rbuf;
+                }
             }
         }
 #ifdef DEBUG

@@ -44,22 +44,22 @@ void renderTweet(Twitter::Tweet *tweet)
   Serial.println(tweet->tweetId);
 }
 
-/**
- * ネットワークを設定して再起動
- * 1行目: 1文字目を捨て、SSIDとする
- * 2行目: パスワードとする
- *
- * @param command 1行目
- */
-void setNetwork(String command)
+String inputJapanese()
 {
-  pref.putString("ssid", command.substring(1));
-  HWSerial.flush();
-  while (!HWSerial.available())
-    ;
-  command = HWSerial.readStringUntil('\r');
-  pref.putString("password", command);
-  ESP.restart();
+  String text;
+  if (digitalRead(DIPSW) == HIGH)
+  {
+    text = kanji.readString();
+  }
+  else
+  {
+    HWSerial.flush();
+    while (!HWSerial.available())
+      ;
+    text = kanji.convertJapanese(kanji.htzConvert(HWSerial.readStringUntil('\r')), NULL);
+  }
+  Serial.println(text);
+  return text;
 }
 
 /**
@@ -77,8 +77,20 @@ String readLineFromSerial()
 }
 
 /**
- * ポケコンからWi-Fi接続情報を設定する
+ * ネットワークを設定して再起動
+ * 1行目: SSIDとする
+ * 2行目: パスワードとする
+ *
  */
+void setNetwork()
+{
+  Serial.print(F("SSID: "));
+  pref.putString("ssid", readLineFromSerial());
+  Serial.print(F("Password: "));
+  pref.putString("password", readLineFromSerial());
+  ESP.restart();
+}
+
 void setAuthInfo()
 {
   Serial.print(F("Consumer key: "));
@@ -96,6 +108,20 @@ void setAuthInfo()
   Serial.println(F("\nALL SET!\nNow proceeding to the normal startup…"));
 }
 
+void setHashtag()
+{
+  Serial.print("Hashtag: #G850Tw #");
+  String tag = readLineFromSerial();
+  if (tag.isEmpty())
+  {
+    pref.remove("hashtag");
+  }
+  else
+  {
+    pref.putString("hashtag", " #" + tag);
+  }
+}
+
 void setup()
 {
   pinMode(PWRLED, OUTPUT);
@@ -106,46 +132,61 @@ void setup()
 
   Serial.begin(115200);
   HWSerial.begin(9600, SERIAL_8N1, GPIO_NUM_27, GPIO_NUM_14, true);
-
   pref.begin("G850TW");
-  Serial.print(F("Connecting "));
-  Serial.print(pref.getString("ssid"));
+
+  Serial.println(F("Send command to start configuration / Auth netWork Hashtag rEset"));
+  delay(3000);
+
+  String command;
+
+  if (Serial.available())
+  {
+    command = Serial.readStringUntil('\r');
+  }
+
+  if (command.indexOf('A') != -1)
+  {
+    setAuthInfo();
+  }
+  if (command.indexOf('W') != -1)
+  {
+    setNetwork();
+  }
+  if (command.indexOf('E') != -1)
+  {
+    ESP.restart();
+  }
+  if (command.indexOf('H') != -1)
+  {
+    setHashtag();
+  }
+
+  Serial.print(F("Connecting to "));
+  Serial.print(pref.getString("ssid", ""));
   Serial.print(F(" with password "));
   Serial.println(pref.getString("password", ""));
-  // wifiMulti.addAP(pref.getString("ssid").c_str(), pref.getString("password", "").c_str());
-  wifiMulti.addAP("Intel-CP-3507", "ububuntu");
+  wifiMulti.addAP(pref.getString("ssid").c_str(), pref.getString("password", "").c_str());
+  // wifiMulti.addAP("Intel-CP-3507", "ububuntu");
 
   bool connOut = false;
+  int failedTimes = 0;
   digitalWrite(PWRLED, connOut);
-  HWSerial.flush();
 
   while (wifiMulti.run() != WL_CONNECTED)
   {
     Serial.print('.');
     delay(200);
+    failedTimes++;
 
-    if (HWSerial.available())
-    {
-      String command = HWSerial.readStringUntil('\r');
-      if (command.startsWith("W"))
-      {
-        setNetwork(command);
-      }
-      if (command.startsWith("E"))
-      {
-        ESP.restart();
-      }
-    }
     connOut = !connOut;
     digitalWrite(PWRLED, connOut);
+    if (failedTimes == 5)
+    {
+      ESP.restart();
+    }
   }
   digitalWrite(PWRLED, LOW);
   Serial.println(F("Connected!"));
-
-  if (Serial.available())
-  {
-    setAuthInfo();
-  }
 
   getTime();
   beginUdp();
@@ -193,7 +234,7 @@ void loop()
     // ツイート検索
     if (command.startsWith("/"))
     {
-      String text = kanji.readString();
+      String text = inputJapanese();
       if (!text.isEmpty())
       {
         tw.search(now(), text.c_str(), timeline);
@@ -243,23 +284,13 @@ void loop()
     // ツイート
     if (command.startsWith("N"))
     {
-      String text;
-      if (digitalRead(DIPSW) == HIGH)
-      {
-        text = kanji.readString();
-      }
-      else
-      {
-        HWSerial.flush();
-        while (!HWSerial.available())
-          ;
-        text = kanji.convertJapanese(kanji.htzConvert(HWSerial.readStringUntil('\r')), NULL);
-        Serial.println(text);
-      }
+      String text = inputJapanese();
+
       if (!text.isEmpty())
       {
-        command = text + " #ALGYAN #つくるよ #G850Tw";
+        command = text + pref.getString("hashtag", "") + " #G850Tw";
         tw.post(now(), command.c_str());
+        gp.gprint(command);
       }
       HWSerial.println(GP_END);
       return;
@@ -268,10 +299,10 @@ void loop()
     // リプライ
     if (command.startsWith("R"))
     {
-      String text = kanji.readString();
+      String text = inputJapanese();
       if (!text.isEmpty())
       {
-        command = text + " #ALGYAN #つくるよ #G850Tw";
+        command = text + pref.getString("hashtag", "") + " #G850Tw";
         if (timeline[currentTweet].tweetId)
         {
           tw.post(now(), command.c_str(), timeline + currentTweet);
@@ -280,15 +311,10 @@ void loop()
         {
           tw.post(now(), command.c_str());
         }
+        gp.gprint(command);
       }
       HWSerial.println(GP_END);
       return;
-    }
-
-    // ネットワークを設定
-    if (command.startsWith("W"))
-    {
-      setNetwork(command);
     }
 
     // バッファクリアして同期

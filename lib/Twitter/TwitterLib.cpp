@@ -16,27 +16,6 @@
 #define Display_MaxData 15
 String unicode_str[Display_MaxData];
 
-const char *base_host = "api.twitter.com";
-const char *base_URL = "";
-const char *base_URI = "";
-const int httpsPort = 443;
-
-String woeid = ""; //query
-
-const char *key_http_method = "";
-const char *key_consumer_key = "oauth_consumer_key";
-const char *key_nonce = "oauth_nonce";
-const char *key_signature_method = "oauth_signature_method";
-const char *key_timestamp = "oauth_timestamp";
-const char *key_token = "oauth_token";
-const char *key_version = "oauth_version";
-const char *key_entities = "";
-const char *key_signature = "oauth_signature";
-const char *value_signature_method = "HMAC-SHA1";
-const char *value_version = "1.0";
-const char *value_entities = "false";
-const char *key_woeid = "";
-
 //Twitter api root CA
 const char *root_ca =
     "-----BEGIN CERTIFICATE-----\n"
@@ -83,103 +62,97 @@ void Twitter::begin(const char *ckey, const char *csecret, const char *atoken, c
 
 void Twitter::getUserTimeline(uint32_t timestamp, const char *screen_name, Tweet *timeline)
 {
-  key_http_method = "GET";
-  base_URL = "https://api.twitter.com/1.1/statuses/user_timeline.json";
-  base_URI = "/1.1/statuses/user_timeline.json";
-  key_entities = "include_rts";
-  key_woeid = "screen_name";
-  TwitterAPI_HTTP_Request(timestamp, screen_name, timeline);
+  Request *rq = new Request("GET", "api.twitter.com", "/1.1/statuses/user_timeline.json");
+  rq->queryParam.add("screen_name", screen_name);
+  rq->queryParam.add("include_rts", "false");
+  TwitterAPI_HTTP_Request(timestamp, rq, timeline);
+  delete rq;
 }
 
 void Twitter::search(uint32_t timestamp, const char *query, Tweet *timeline)
 {
-  key_http_method = "GET";
-  base_URL = "https://api.twitter.com/1.1/search/tweets.json";
-  base_URI = "/1.1/search/tweets.json";
-  key_entities = "include_entities";
-  key_woeid = "q";
-  TwitterAPI_HTTP_Request(timestamp, urlEncode(query).c_str(), timeline);
+  Request *rq = new Request("GET", "api.twitter.com", "/1.1/search/tweets.json");
+  rq->queryParam.add("include_entities", "false");
+  rq->queryParam.add("q", query);
+  TwitterAPI_HTTP_Request(timestamp, rq, timeline);
+  delete rq;
 }
 
 void Twitter::post(uint32_t timestamp, const char *status, Tweet *replyTo)
 {
-  key_http_method = "POST";
-  base_URL = "https://api.twitter.com/1.1/statuses/update.json";
-  base_URI = "/1.1/statuses/update.json";
-  if (replyTo == NULL)
+  Request *rq = new Request("POST", "api.twitter.com", "/1.1/statuses/update.json");
+  if (replyTo != NULL)
   {
-    key_woeid = "status";
+    rq->queryParam.add("in_reply_to_status_id", replyTo->tweetId);
   }
-  else
-  {
-    String reply = "in_reply_to_status_id=";
-    key_woeid = (reply + replyTo->tweetId + "&status").c_str();
-    status = ("@" + replyTo->userScreenName + " " + String(status)).c_str();
-  }
-  TwitterAPI_HTTP_Request(timestamp, urlEncode(status).c_str(), NULL);
+  rq->bodyParam.add("status", status);
+
+  TwitterAPI_HTTP_Request(timestamp, rq, NULL);
+  delete rq;
 }
 
-void Twitter::TwitterAPI_HTTP_Request(uint32_t value_timestamp, const char *screen_name, Tweet *timeline)
+void Twitter::TwitterAPI_HTTP_Request(uint32_t value_timestamp, Request *req, Tweet *timeline)
 {
   WiFiClientSecure client;
 
   uint32_t value_nonce = 1111111111 + value_timestamp;
-  woeid = screen_name;
 
   String status_all = "";
-  String parameter_str = make_parameter_str(status_all, value_nonce, value_timestamp);
-  String sign_base_str = make_sign_base_str(parameter_str);
-  String oauth_signature = make_signature(consumer_secret, access_secret, sign_base_str);
-  String OAuth_header = make_OAuth_header(oauth_signature, value_nonce, value_timestamp);
+  String parameter_str = make_parameter_str(req, value_nonce, value_timestamp);
+  String sign_base_str = make_sign_base_str(req, parameter_str);
+  String oauth_signature = make_signature(sign_base_str);
+  String OAuth_header = make_OAuth_header(req, oauth_signature);
 
+  client.stop();
   client.setCACert(root_ca);
 
-  if (client.connect(base_host, httpsPort))
+  if (client.connect(req->host.c_str(), 443, 2000))
   {
 #ifdef DEBUG
-    Serial.print(base_host);
-    Serial.println(F("connected"));
+    Serial.print(F("Building an HTTP request."));
 #endif
 
-    String str01 = String(key_http_method) + " " + String(base_URI) + "?" + String(key_woeid) + "=" + String(woeid);
-    if (String(key_http_method).equals("GET"))
-    {
-      str01 += "&" + String(key_entities) + "=" + String(value_entities);
-    }
-    str01 += " HTTP/1.1\r\n";
-    str01 += "Accept-Charset: UTF-8\r\n";
-    str01 += "Accept-Language: ja,en\r\n";
-    String str02 = "Authorization: " + OAuth_header + "\r\n";
-    str02 += "Connection: close\r\n";
-    str02 += "Content-Length: 0\r\n";
-    str02 += "Content-Type: application/x-www-form-urlEncoded\r\n";
-    str02 += "Host: " + String(base_host) + "\r\n\r\n";
+    String content = req->bodyParam.get(), header;
+    header = req->getRequestString();
+    header += "Accept-Language: ja,en\r\n";
+    header += "Authorization: " + OAuth_header + "\r\n";
+    header += "Connection: close\r\n";
+    header += "Content-Length: " + String(content.length()) + "\r\n";
+    header += "Content-Type: application/x-www-form-urlencoded\r\n";
+    header += "Accept: application/json\r\n";
+    header += "Host: " + req->host + "\r\n\r\n";
 
-    client.print(str01);
-    client.print(str02);
-
+    Serial.println(F("-------------------- HTTP Request Sent"));
+    Serial.print(header);
+    Serial.print(content);
 #ifdef DEBUG
-    Serial.println(F("-------------------- HTTP GET Request Send"));
-    Serial.print(str01);
-    Serial.print(str02);
 #endif
+
+    client.print(header);
+    if (req->method != "GET")
+    {
+      client.print(content);
+      client.print("\r\n");
+    }
 
     String res_str = "";
 
     uint16_t iter = 0, dataset;
-#ifdef DEBUG
-    Serial.println(F("--------------------HTTP Response"));
-#endif
 
-    if (String(key_http_method).equals("POST"))
+    if (req->method.equals("POST"))
     {
       return;
     }
+
+#ifdef DEBUG
+    Serial.println(F("--------------------HTTP Response"));
+#endif
 
     while (client.connected())
     {
       while (client.available())
       {
+        // Header
         res_str = client.readStringUntil('\n');
 #ifdef DEBUG
         Serial.println(res_str);
@@ -190,66 +163,64 @@ void Twitter::TwitterAPI_HTTP_Request(uint32_t value_timestamp, const char *scre
           dataset = 0;
           while (client.connected())
           {
-            while (client.available())
-            {
-              res_str = client.readStringUntil(',');
+            // body
+            res_str = client.readStringUntil(',');
 #ifdef DEBUG
-              Serial.println(res_str);
+            Serial.println(res_str);
 #endif
-              if (iter >= Display_MaxData)
-                break;
-              if (res_str.startsWith("\"name\":\""))
+            if (iter >= Display_MaxData)
+              break;
+            if (res_str.startsWith("\"name\":\""))
+            {
+              while (res_str[res_str.length() - 1] != '"')
               {
-                while (res_str[res_str.length() - 1] != '"')
-                {
-                  res_str += ',';
-                  res_str += client.readStringUntil(',');
-                }
-                res_str.remove(0, 8);
-                res_str.remove(res_str.length() - 1);
-                timeline[iter].name = UTF16toUTF8(res_str);
-                dataset |= 1;
+                res_str += ',';
+                res_str += client.readStringUntil(',');
               }
-              else if ((dataset & 2) == 0 && res_str.startsWith("\"text\":\""))
+              res_str.remove(0, 8);
+              res_str.remove(res_str.length() - 1);
+              timeline[iter].name = UTF16toUTF8(res_str);
+              dataset |= 1;
+            }
+            else if ((dataset & 2) == 0 && res_str.startsWith("\"text\":\""))
+            {
+              while (res_str[res_str.length() - 1] != '"')
               {
-                while (res_str[res_str.length() - 1] != '"')
-                {
-                  res_str += ',';
-                  res_str += client.readStringUntil(',');
-                }
-                res_str = UTF16toUTF8(res_str);
-                res_str.remove(0, 8);
-                res_str.remove(res_str.length() - 1);
-                timeline[iter].text = res_str;
-                dataset |= 2;
+                res_str += ',';
+                res_str += client.readStringUntil(',');
               }
-              else if ((dataset & 4) == 0 && res_str.startsWith("\"id_str\":"))
+              res_str = UTF16toUTF8(res_str);
+              res_str.remove(0, 8);
+              res_str.remove(res_str.length() - 1);
+              timeline[iter].text = res_str;
+              dataset |= 2;
+            }
+            else if ((dataset & 4) == 0 && res_str.startsWith("\"id_str\":"))
+            {
+              res_str.remove(0, 10);
+              res_str.remove(res_str.length() - 1);
+              timeline[iter].tweetId = res_str;
+              dataset |= 4;
+            }
+            else if (res_str.startsWith("\"screen_name\":"))
+            {
+              res_str.remove(0, 15);
+              res_str.remove(res_str.length() - 1);
+              timeline[iter].userScreenName = res_str;
+              dataset |= 8;
+            }
+            else if (res_str.startsWith("\"favorite_count\":"))
+            {
+              if (dataset == 15)
               {
-                res_str.remove(0, 10);
-                res_str.remove(res_str.length() - 1);
-                timeline[iter].tweetId = res_str;
-                dataset |= 4;
+                iter++;
+                dataset = 0;
               }
-              else if (res_str.startsWith("\"screen_name\":"))
-              {
-                res_str.remove(0, 15);
-                res_str.remove(res_str.length() - 1);
-                timeline[iter].userScreenName = res_str;
-                dataset |= 8;
-              }
-              else if (res_str.startsWith("\"favorite_count\":"))
-              {
-                if (dataset == 15)
-                {
-                  iter++;
-                  dataset = 0;
-                }
-              }
-              // place name を user name と誤認しないよう、読み飛ばす
-              else if (res_str.startsWith("\"place\":{"))
-              {
-                client.readStringUntil('}');
-              }
+            }
+            // place name を user name と誤認しないよう、読み飛ばす
+            else if (res_str.startsWith("\"place\":{"))
+            {
+              client.readStringUntil('}');
             }
           }
         }
@@ -266,40 +237,25 @@ void Twitter::TwitterAPI_HTTP_Request(uint32_t value_timestamp, const char *scre
   }
 }
 
-String Twitter::make_parameter_str(String status_all, uint32_t value_nonce, uint32_t value_timestamp)
+String Twitter::make_parameter_str(Request *req, uint32_t value_nonce, uint32_t value_timestamp)
 {
-  String parameter_str = "";
-  if (String(key_http_method).equals("GET"))
-  {
-    parameter_str += key_entities;
-    parameter_str += "=";
-    parameter_str += value_entities;
-    parameter_str += "&";
-  }
-  parameter_str += String(key_consumer_key) + "=" + consumer_key;
-  parameter_str += "&";
-  parameter_str += String(key_nonce) + "=" + value_nonce;
-  parameter_str += "&";
-  parameter_str += String(key_signature_method) + "=" + value_signature_method;
-  parameter_str += "&";
-  parameter_str += String(key_timestamp) + "=" + value_timestamp;
-  parameter_str += "&";
-  parameter_str += String(key_token) + "=" + access_token;
-  parameter_str += "&";
-  parameter_str += String(key_version) + "=" + value_version;
-  parameter_str += "&";
-  parameter_str += String(key_woeid) + "=" + woeid;
+  req->authParam.add("oauth_consumer_key", consumer_key);
+  req->authParam.add("oauth_nonce", String(value_nonce));
+  req->authParam.add("oauth_signature_method", "HMAC-SHA1");
+  req->authParam.add("oauth_timestamp", String(value_timestamp));
+  req->authParam.add("oauth_token", access_token);
+  req->authParam.add("oauth_version", "1.0");
+
 #ifdef DEBUG
   Serial.print(F("parameter_str:  "));
-  Serial.println(parameter_str);
+  Serial.println(req->getParameterString());
 #endif
-  return parameter_str;
+  return req->getParameterString();
 }
 //*************************************************
-String Twitter::make_sign_base_str(String parameter_str)
+String Twitter::make_sign_base_str(Request *req, String parameter_str)
 {
-  String sign_base_str = key_http_method;
-  sign_base_str += "&" + urlEncode(base_URL);
+  String sign_base_str = req->method + "&" + urlEncode(req->getUrl("https").c_str());
   sign_base_str += "&" + urlEncode(parameter_str.c_str());
 #ifdef DEBUG
   Serial.print(F("sign_base_str = "));
@@ -308,11 +264,11 @@ String Twitter::make_sign_base_str(String parameter_str)
   return sign_base_str;
 }
 //*************************************************
-String Twitter::make_signature(const char *secret_one, const char *secret_two, String sign_base_str)
+String Twitter::make_signature(String sign_base_str)
 {
-  String signing_key = urlEncode(secret_one);
+  String signing_key = urlEncode(consumer_secret);
   signing_key += "&";
-  signing_key += urlEncode(secret_two);
+  signing_key += urlEncode(access_secret);
 #ifdef DEBUG
   Serial.print(F("signing_key = "));
   Serial.println(signing_key);
@@ -328,7 +284,7 @@ String Twitter::make_signature(const char *secret_one, const char *secret_two, S
   uint8_t digest[32];
   ssl_hmac_sha1((uint8_t *)sign_base_str.c_str(), (int)sign_base_str.length(), digestkey, SHA1_SIZE, digest);
 
-  String oauth_signature = urlEncode(base64::encode(digest, SHA1_SIZE).c_str());
+  String oauth_signature = base64::encode(digest, SHA1_SIZE).c_str();
 #ifdef DEBUG
   Serial.print(F("oauth_signature = "));
   Serial.println(oauth_signature);
@@ -336,49 +292,16 @@ String Twitter::make_signature(const char *secret_one, const char *secret_two, S
   return oauth_signature;
 }
 //*************************************************
-String Twitter::make_OAuth_header(String oauth_signature, uint32_t value_nonce, uint32_t value_timestamp)
+String Twitter::make_OAuth_header(Request *req, String oauth_signature)
 {
-  String OAuth_header = "OAuth ";
-  if (String(key_http_method).equals("GET"))
-  {
-    OAuth_header += key_entities;
-    OAuth_header += "=\"";
-    OAuth_header += value_entities;
-    OAuth_header += "\",";
-  }
-  OAuth_header += key_consumer_key;
-  OAuth_header += "=\"";
-  OAuth_header += consumer_key;
-  OAuth_header += "\",";
-  OAuth_header += key_nonce;
-  OAuth_header += "=\"";
-  OAuth_header += value_nonce;
-  OAuth_header += "\",";
-  OAuth_header += key_signature;
-  OAuth_header += "=\"";
-  OAuth_header += oauth_signature;
-  OAuth_header += "\",";
-  OAuth_header += key_signature_method;
-  OAuth_header += "=\"";
-  OAuth_header += value_signature_method;
-  OAuth_header += "\",";
-  OAuth_header += key_timestamp;
-  OAuth_header += "=\"";
-  OAuth_header += value_timestamp;
-  OAuth_header += "\",";
-  OAuth_header += key_token;
-  OAuth_header += "=\"";
-  OAuth_header += access_token;
-  OAuth_header += "\",";
-  OAuth_header += key_version;
-  OAuth_header += "=\"";
-  OAuth_header += value_version;
-  OAuth_header += "\",";
-  OAuth_header += key_woeid;
-  OAuth_header += "=\"";
-  OAuth_header += woeid;
-  OAuth_header += "\"";
-  return OAuth_header;
+  Parameter temp;
+
+  temp = req->authParam;
+  temp.concat(req->queryParam);
+  temp.sort();
+  temp.add("oauth_signature", oauth_signature);
+
+  return "OAuth " + temp.get(",", "=");
 }
 //*************************************************
 //Reference: https://github.com/igrr/axtls-8266/blob/master/crypto/hmac.c
