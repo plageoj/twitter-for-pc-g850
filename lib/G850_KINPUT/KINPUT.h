@@ -25,12 +25,12 @@ public:
      * @param htztable 半角→全角テーブルのファイル名
      * @returns 接続成功したら true
      */
-    bool begin(const char *htztable);
+    int begin(const char *htztable);
     /**
      * 連文節変換エンジンへ接続する
      * @returns 接続成功したら true
      */
-    bool begin()
+    int begin()
     {
         return begin("/htz.tbl");
     }

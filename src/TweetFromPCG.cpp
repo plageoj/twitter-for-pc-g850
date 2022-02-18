@@ -56,7 +56,9 @@ String inputJapanese()
     HWSerial.flush();
     while (!HWSerial.available())
       ;
-    text = kanji.convertJapanese(kanji.htzConvert(HWSerial.readStringUntil('\r')), NULL);
+    String input = kanji.htzConvert(HWSerial.readStringUntil('\r'));
+    Serial.println(input);
+    text = kanji.convertJapanese(input, NULL);
   }
   Serial.println(text);
   return text;
@@ -120,23 +122,11 @@ void setHashtag()
   {
     pref.putString("hashtag", " #" + tag);
   }
+  Serial.println("Hashtag: #G850Tw" + pref.getString("hashtag", ""));
 }
 
-void setup()
+void readCommand()
 {
-  pinMode(PWRLED, OUTPUT);
-  pinMode(ERRLED, OUTPUT);
-  pinMode(DIPSW, INPUT_PULLUP);
-  digitalWrite(PWRLED, HIGH);
-  digitalWrite(ERRLED, HIGH);
-
-  Serial.begin(115200);
-  HWSerial.begin(9600, SERIAL_8N1, GPIO_NUM_27, GPIO_NUM_14, true);
-  pref.begin("G850TW");
-
-  Serial.println(F("Send command to start configuration / Auth netWork Hashtag rEset"));
-  delay(3000);
-
   String command;
 
   if (Serial.available())
@@ -160,13 +150,28 @@ void setup()
   {
     setHashtag();
   }
+}
+
+void setup()
+{
+  pinMode(PWRLED, OUTPUT);
+  pinMode(ERRLED, OUTPUT);
+  pinMode(DIPSW, INPUT_PULLUP);
+  digitalWrite(PWRLED, HIGH);
+  digitalWrite(ERRLED, HIGH);
+
+  Serial.begin(115200);
+  HWSerial.begin(9600, SERIAL_8N1, GPIO_NUM_27, GPIO_NUM_14, true);
+  pref.begin("G850TW");
+
+  Serial.println(F("Send command to start configuration / Auth netWork Hashtag rEset"));
+  readCommand();
 
   Serial.print(F("Connecting to "));
   Serial.print(pref.getString("ssid", ""));
   Serial.print(F(" with password "));
   Serial.println(pref.getString("password", ""));
   wifiMulti.addAP(pref.getString("ssid").c_str(), pref.getString("password", "").c_str());
-  // wifiMulti.addAP("Intel-CP-3507", "ububuntu");
 
   bool connOut = false;
   int failedTimes = 0;
@@ -175,12 +180,13 @@ void setup()
   while (wifiMulti.run() != WL_CONNECTED)
   {
     Serial.print('.');
+    readCommand();
     delay(200);
     failedTimes++;
 
     connOut = !connOut;
     digitalWrite(PWRLED, connOut);
-    if (failedTimes == 5)
+    if (failedTimes == 100)
     {
       ESP.restart();
     }
@@ -196,9 +202,9 @@ void setup()
       pref.getString("consumer_secret").c_str(),
       pref.getString("access_token").c_str(),
       pref.getString("access_secret").c_str());
-  //SPIFFSの都合上必ずGP->kanjiの順でロードせよ
+  // SPIFFSの都合上必ずGP->kanjiの順でロードせよ
   gp.begin();
-  kanji.begin();
+  Serial.println(kanji.begin());
 
   digitalWrite(PWRLED, HIGH);
   digitalWrite(ERRLED, LOW);
@@ -211,15 +217,11 @@ void loop()
   static Twitter::Tweet timeline[Display_MaxData];
   static uint8_t currentTweet = 0;
 
-  while (Serial.available())
-  {
-    gp.gprint(Serial.readStringUntil('\n'));
-  }
-
   if (HWSerial.available())
   {
     command = HWSerial.readStringUntil('\r');
     Serial.println(command);
+    HWSerial.readStringUntil('\n');
 
     // ユーザタイムラインを取得
     if (command.startsWith("U"))
@@ -305,6 +307,7 @@ void loop()
         command = text + pref.getString("hashtag", "") + " #G850Tw";
         if (timeline[currentTweet].tweetId)
         {
+          command = "@" + timeline[currentTweet].userScreenName + " " + command;
           tw.post(now(), command.c_str(), timeline + currentTweet);
         }
         else
@@ -325,4 +328,6 @@ void loop()
       return;
     }
   }
+
+  readCommand();
 }

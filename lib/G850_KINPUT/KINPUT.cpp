@@ -16,9 +16,15 @@ KINPUT::KINPUT(unsigned int max_segs)
     Max_Segments = max_segs;
 }
 
-bool KINPUT::begin(const char *htztable)
+int KINPUT::begin(const char *htztable)
 {
     htz = SPIFFS.open(htztable, "r");
+    if (!htz)
+    {
+        Serial.println("Failed to open htz table");
+        while (1)
+            ;
+    }
     return client.connect("www.google.com", 80);
 }
 
