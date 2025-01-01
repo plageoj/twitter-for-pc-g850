@@ -8,16 +8,16 @@ extern HardwareSerial HWSerial;
 File zth;
 
 #define TEXT_MODE 0
-#define HIRA_MODE 1
-#define KNJI_MODE 2
+#define HIRAGANA_MODE 1
+#define KANJI_MODE 2
 
-bool GPRINT::begin(const char *ujistable, const char *hanfont, const char *zenfont, const char *zthtable)
+bool GPrint::begin(const char *utf2JisTable, const char *hanFont, const char *zenFont, const char *z2hTable)
 {
-    misaki.SPIFFS_Misaki_Init3F(ujistable, hanfont, zenfont);
-    return SPIFFS.open(zthtable, "r");
+    misaki.SPIFFS_Misaki_Init3F(utf2JisTable, hanFont, zenFont);
+    return SPIFFS.open(z2hTable, "r");
 }
 
-void GPRINT::flowControl()
+void GPrint::flowControl()
 {
     if (HWSerial.read() == 19)
     {
@@ -33,15 +33,15 @@ void GPRINT::flowControl()
     delay(10);
 }
 
-void GPRINT::clearBuffer()
+void GPrint::clearBuffer()
 {
     HWSerial.println();
     HWSerial.readStringUntil('-');
 }
 
-void GPRINT::gprint(String utf8)
+void GPrint::gPrint(String utf8)
 {
-    uint8_t gpbuf[280][8] = {};
+    uint8_t gpBuf[280][8] = {};
     int prevMode = TEXT_MODE;
     utf8.replace("\n", "");
     const char *cpt = utf8.c_str();
@@ -67,25 +67,25 @@ void GPRINT::gprint(String utf8)
         if (outlen)
         {
             String utf = String(cpt - outlen).substring(0, outlen);
-            uint16_t len = misaki.StrDirect_MisakiFNT_readALL(utf, gpbuf) / 2;
+            uint16_t len = misaki.StrDirect_MisakiFNT_readALL(utf, gpBuf) / 2;
             uint8_t spaces = 0;
             flowControl();
-            if (prevMode != KNJI_MODE)
+            if (prevMode != KANJI_MODE)
             {
                 HWSerial.println("\n\xe3");
-                prevMode = KNJI_MODE;
+                prevMode = KANJI_MODE;
             }
             for (int i = 0; i < len; i++)
             {
                 outlen = 0;
                 for (int j = 0; j < 8; j++)
                 {
-                    uint8_t rtbuf = 0;
+                    uint8_t rotBuf = 0;
                     // フォントデータは90度回転した行列で来るので、読める向きに回す
                     for (int k = 0; k < 8; k++)
-                        rtbuf += (gpbuf[i][k] & 1 << (7 - j)) ? 1 << k : 0;
+                        rotBuf += (gpBuf[i][k] & 1 << (7 - j)) ? 1 << k : 0;
 
-                    if (rtbuf == 0 || rtbuf == 255)
+                    if (rotBuf == 0 || rotBuf == 255)
                         spaces++;
                     else
                         spaces = 0;
@@ -93,12 +93,12 @@ void GPRINT::gprint(String utf8)
                     // 空白が連続したら出力しない
                     if (spaces <= 7)
                     {
-                        HWSerial.print(rtbuf >> 4, HEX);
-                        HWSerial.print(rtbuf & 15, HEX);
+                        HWSerial.print(rotBuf >> 4, HEX);
+                        HWSerial.print(rotBuf & 15, HEX);
 
 #ifdef DEBUG
-                        Serial.print(rtbuf >> 4, HEX);
-                        Serial.print(rtbuf & 15, HEX);
+                        Serial.print(rotBuf >> 4, HEX);
+                        Serial.print(rotBuf & 15, HEX);
 #endif
                         outlen++;
                     }
@@ -128,15 +128,15 @@ void GPRINT::gprint(String utf8)
             bool hk = zth.seek(addr);
             if (!hk) // テーブルに文字がない
                 break;
-            if (addr > 0x60 && prevMode != TEXT_MODE) //カタカナ
+            if (addr > 0x60 && prevMode != TEXT_MODE) // カタカナ
             {
                 HWSerial.println("\n\xe2"); // テキストモード
                 prevMode = TEXT_MODE;
             }
-            else if (addr < 0x60 && prevMode != HIRA_MODE) // ひらがな
+            else if (addr < 0x60 && prevMode != HIRAGANA_MODE) // ひらがな
             {
                 HWSerial.println("\n\xe1"); // ひらがなモード
-                prevMode = HIRA_MODE;
+                prevMode = HIRAGANA_MODE;
             }
             char letter = zth.read();
             flowControl();
@@ -184,7 +184,7 @@ void GPRINT::gprint(String utf8)
     return;
 }
 
-int GPRINT::putSingleByteChar(const char *str)
+int GPrint::putSingleByteChar(const char *str)
 {
     int outlen = 0;
     while (*str && *str < 0x80)

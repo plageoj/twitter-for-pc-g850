@@ -15,5 +15,8 @@
         "ostream": "cpp",
         "sstream": "cpp",
         "streambuf": "cpp"
-    }
+    },
+    "cSpell.words": [
+        "Misaki"
+    ]
 }

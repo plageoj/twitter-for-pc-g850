@@ -8,10 +8,10 @@
 #include <GPRINT.h>
 #include <KINPUT.h>
 
-#define PWRLED 25
-#define ERRLED 33
+#define PWR_LED 25
+#define ERR_LED 33
 #define BUZZER 32
-#define DIPSW 34
+#define DIP_SW 34
 
 WiFiMulti wifiMulti;
 
@@ -23,8 +23,8 @@ WiFiMulti wifiMulti;
 HardwareSerial HWSerial(1);
 Preferences pref;
 Twitter tw;
-GPRINT gp;
-KINPUT kanji(Max_Segments);
+GPrint gp;
+kInput kanji(Max_Segments);
 
 /**
  * 与えられたツイートを描画する
@@ -32,10 +32,10 @@ KINPUT kanji(Max_Segments);
  */
 void renderTweet(Twitter::Tweet *tweet)
 {
-  gp.gprint(tweet->name);
+  gp.gPrint(tweet->name);
   HWSerial.println("\xe2"); // テキストモード
   HWSerial.println(GP_NL);
-  gp.gprint(tweet->text);
+  gp.gPrint(tweet->text);
   HWSerial.println(GP_END);
   HWSerial.flush();
 
@@ -47,7 +47,7 @@ void renderTweet(Twitter::Tweet *tweet)
 String inputJapanese()
 {
   String text;
-  if (digitalRead(DIPSW) == HIGH)
+  if (digitalRead(DIP_SW) == HIGH)
   {
     text = kanji.readString();
   }
@@ -154,11 +154,11 @@ void readCommand()
 
 void setup()
 {
-  pinMode(PWRLED, OUTPUT);
-  pinMode(ERRLED, OUTPUT);
-  pinMode(DIPSW, INPUT_PULLUP);
-  digitalWrite(PWRLED, HIGH);
-  digitalWrite(ERRLED, HIGH);
+  pinMode(PWR_LED, OUTPUT);
+  pinMode(ERR_LED, OUTPUT);
+  pinMode(DIP_SW, INPUT_PULLUP);
+  digitalWrite(PWR_LED, HIGH);
+  digitalWrite(ERR_LED, HIGH);
 
   Serial.begin(115200);
   HWSerial.begin(9600, SERIAL_8N1, GPIO_NUM_27, GPIO_NUM_14, true);
@@ -175,7 +175,7 @@ void setup()
 
   bool connOut = false;
   int failedTimes = 0;
-  digitalWrite(PWRLED, connOut);
+  digitalWrite(PWR_LED, connOut);
 
   while (wifiMulti.run() != WL_CONNECTED)
   {
@@ -185,13 +185,13 @@ void setup()
     failedTimes++;
 
     connOut = !connOut;
-    digitalWrite(PWRLED, connOut);
+    digitalWrite(PWR_LED, connOut);
     if (failedTimes == 100)
     {
       ESP.restart();
     }
   }
-  digitalWrite(PWRLED, LOW);
+  digitalWrite(PWR_LED, LOW);
   Serial.println(F("Connected!"));
 
   getTime();
@@ -206,8 +206,8 @@ void setup()
   gp.begin();
   Serial.println(kanji.begin());
 
-  digitalWrite(PWRLED, HIGH);
-  digitalWrite(ERRLED, LOW);
+  digitalWrite(PWR_LED, HIGH);
+  digitalWrite(ERR_LED, LOW);
   HWSerial.println('-'); // READY を送出
 }
 
@@ -245,7 +245,7 @@ void loop()
       }
       else
       {
-        gp.gprint(F("検索ワードを入力してください"));
+        gp.gPrint(F("検索ワードを入力してください"));
         HWSerial.println(GP_END);
       }
       return;
@@ -261,7 +261,7 @@ void loop()
       }
       else
       {
-        gp.gprint(F("取得件数外です"));
+        gp.gPrint(F("取得件数外です"));
         HWSerial.println(GP_END);
       }
       return;
@@ -277,7 +277,7 @@ void loop()
       }
       else
       {
-        gp.gprint(F("これ以前のツイートはありません"));
+        gp.gPrint(F("これ以前のツイートはありません"));
         HWSerial.println(GP_END);
       }
       return;
@@ -292,7 +292,7 @@ void loop()
       {
         command = text + pref.getString("hashtag", "") + " #G850Tw";
         tw.post(now(), command.c_str());
-        gp.gprint(command);
+        gp.gPrint(command);
       }
       HWSerial.println(GP_END);
       return;
@@ -314,7 +314,7 @@ void loop()
         {
           tw.post(now(), command.c_str());
         }
-        gp.gprint(command);
+        gp.gPrint(command);
       }
       HWSerial.println(GP_END);
       return;

@@ -1,31 +1,31 @@
-#ifndef G850_KINPUT_H_INCLUDED
-#define G850_KINPUT_H_INCLUDED
+#ifndef G850_K_INPUT_H_INCLUDED
+#define G850_K_INPUT_H_INCLUDED
 
 #include <Arduino.h>
 #include <WiFiClient.h>
 
 /**
- * ポケコン用シリアル連文節変換入力 KINPUT
+ * ポケコン用シリアル連文節変換入力 kInput
  */
-class KINPUT
+class kInput
 {
 public:
     struct ConversionResult
     {
-        String yomi;
+        String reading;
         String candidates[5] = {};
     };
     /**
      * 連文節変換の設定
      * @param max_segs 最大分節数
      */
-    KINPUT(unsigned int max_segs);
+    kInput(unsigned int max_segs);
     /**
      * 連文節変換エンジンへ接続する
-     * @param htztable 半角→全角テーブルのファイル名
+     * @param h2zTable 半角→全角テーブルのファイル名
      * @returns 接続成功したら true
      */
-    int begin(const char *htztable);
+    int begin(const char *h2zTable);
     /**
      * 連文節変換エンジンへ接続する
      * @returns 接続成功したら true

@@ -7,18 +7,18 @@
 
 WiFiClient client;
 extern HardwareSerial HWSerial;
-extern GPRINT gp;
+extern GPrint gp;
 File htz;
 unsigned int Max_Segments;
 
-KINPUT::KINPUT(unsigned int max_segs)
+kInput::kInput(unsigned int max_segs)
 {
     Max_Segments = max_segs;
 }
 
-int KINPUT::begin(const char *htztable)
+int kInput::begin(const char *h2zTable)
 {
-    htz = SPIFFS.open(htztable, "r");
+    htz = SPIFFS.open(h2zTable, "r");
     if (!htz)
     {
         Serial.println("Failed to open htz table");
@@ -28,7 +28,7 @@ int KINPUT::begin(const char *htztable)
     return client.connect("www.google.com", 80);
 }
 
-String KINPUT::convertJapanese(String hiragana, ConversionResult *resultSet)
+String kInput::convertJapanese(String hiragana, ConversionResult *resultSet)
 {
     String ret = "";
     uint8_t segment = 0;
@@ -48,39 +48,39 @@ String KINPUT::convertJapanese(String hiragana, ConversionResult *resultSet)
         client.readStringUntil('[');
         client.readStringUntil('"');
 
-        String rbuf = client.readStringUntil('"');
-        String ybuf = rbuf;
+        String rBuf = client.readStringUntil('"');
+        String yBuf = rBuf;
 #ifdef DEBUG
-        Serial.println(rbuf);
+        Serial.println(rBuf);
 #endif
-        char beginning = ybuf[0];
+        char beginning = yBuf[0];
 
         if (resultSet != NULL && segment < Max_Segments)
         {
-            resultSet[segment].yomi = rbuf;
+            resultSet[segment].reading = rBuf;
         }
         for (uint8_t i = 0; client.read() == ','; i++)
         {
             client.readStringUntil('"');
 
-            rbuf = client.readStringUntil('"');
+            rBuf = client.readStringUntil('"');
 #ifdef DEBUG
-            Serial.println(rbuf);
+            Serial.println(rBuf);
 #endif
 
             if (resultSet != NULL && segment < Max_Segments)
             {
-                resultSet[segment].candidates[i] = rbuf;
+                resultSet[segment].candidates[i] = rBuf;
             }
             if (i == 0)
             {
                 if ((beginning >= '0' && beginning <= '9') || beginning == '#' || beginning == '@')
                 {
-                    ret += ybuf;
+                    ret += yBuf;
                 }
                 else
                 {
-                    ret += rbuf;
+                    ret += rBuf;
                 }
             }
         }
@@ -92,7 +92,7 @@ String KINPUT::convertJapanese(String hiragana, ConversionResult *resultSet)
     return ret;
 }
 
-String KINPUT::readString()
+String kInput::readString()
 {
     String sjis, ret = "";
     HWSerial.flush();
@@ -111,9 +111,9 @@ String KINPUT::readString()
             sjis.remove(0, 1);
             String cdd = htzConvert(sjis);
             ret += cdd;
-            gp.gprint(cdd);
+            gp.gPrint(cdd);
             HWSerial.println(GP_NL);
-            gp.gprint(F("キーを押してください"));
+            gp.gPrint(F("キーを押してください"));
             HWSerial.println(GP_END);
             while (!HWSerial.available())
                 ;
@@ -124,17 +124,17 @@ String KINPUT::readString()
         ConversionResult segment[Max_Segments];
         convertJapanese(htzConvert(sjis), segment);
         int maxCandidates = 0;
-        for (int i = 0; i < Max_Segments && !segment[i].yomi.isEmpty(); i++)
+        for (int i = 0; i < Max_Segments && !segment[i].reading.isEmpty(); i++)
         {
             HWSerial.println('-');
             for (int j = 0; j < 5 && !segment[i].candidates[j].isEmpty(); j++)
             {
-                gp.gprint(String(j + 1) + segment[i].candidates[j]);
+                gp.gPrint(String(j + 1) + segment[i].candidates[j]);
                 HWSerial.println('\xe2'); // テキストモード
                 HWSerial.println(GP_NL);
                 maxCandidates = j + 1;
             }
-            gp.gprint("#1-" + String(maxCandidates) + "? ");
+            gp.gPrint("#1-" + String(maxCandidates) + "? ");
             HWSerial.println(GP_END);
 
             while (!HWSerial.available())
@@ -153,9 +153,9 @@ String KINPUT::readString()
     }
 }
 
-String KINPUT::htzConvert(String text)
+String kInput::htzConvert(String text)
 {
-    bool hiramode = true;
+    bool hiraganaMode = true;
     unsigned int pos = 0, len = text.length();
     char buf[4] = "";
     String ret = "";
@@ -165,11 +165,11 @@ String KINPUT::htzConvert(String text)
         char r = text.charAt(pos);
         if (r == 248) // 秒記号 ′′
         {
-            hiramode = !hiramode;
+            hiraganaMode = !hiraganaMode;
         }
         else if (r >= 0xa1 && r <= 0xdf) // 仮名
         {
-            uint32_t adr = (r - 0xa1) * 3 + (hiramode ? 0xc1 : 1);
+            uint32_t adr = (r - 0xa1) * 3 + (hiraganaMode ? 0xc1 : 1);
             htz.seek(adr);
             htz.readBytes(buf, 3);
 

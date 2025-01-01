@@ -1,5 +1,5 @@
-#ifndef G850_GPRINT_H_INCLUDED
-#define G850_GPRINT_H_INCLUDED
+#ifndef G850_G_PRINT_H_INCLUDED
+#define G850_G_PRINT_H_INCLUDED
 
 #include <Arduino.h>
 #include <SPIFFS.h>
@@ -8,24 +8,23 @@
 #define GP_NL '\xf0'
 #define GP_END '\xee'
 
-class GPRINT
+class GPrint
 {
 public:
     /**
- * ポケコン漢字ライブラリの利用を開始する
- *
- * @param ujistable UTF8→SJIS変換テーブルのパス
- * @param hanfont 半角フォントのパス
- * @param zenfont 全角フォントのパス
- * @param zthtable 全角→半角変換テーブルのパス
- * @param htztable 半角→全角変換テーブルのパス
- *
- * @returns ファイルが開ければ true
- */
-    bool begin(const char *ujistable, const char *hanfont, const char *zenfont, const char *zthtable);
-    bool begin(const char *ujistable, const char *hanfont, const char *zenfont)
+     * ポケコン漢字ライブラリの利用を開始する
+     *
+     * @param utf2JisTable UTF8→SJIS変換テーブルのパス
+     * @param hanFont 半角フォントのパス
+     * @param zenFont 全角フォントのパス
+     * @param z2hTable 全角→半角変換テーブルのパス
+     *
+     * @returns ファイルが開ければ true
+     */
+    bool begin(const char *utf2JisTable, const char *hanFont, const char *zenFont, const char *z2hTable);
+    bool begin(const char *utf2JisTable, const char *hanFont, const char *zenFont)
     {
-        return begin(ujistable, hanfont, zenfont, "/zth.tbl");
+        return begin(utf2JisTable, hanFont, zenFont, "/zth.tbl");
     }
     bool begin()
     {
@@ -37,10 +36,10 @@ public:
  *
  * @param text 変換する文字列
  */
-    void gprint(String text);
-    void gprint(char *text)
+    void gPrint(String text);
+    void gPrint(char *text)
     {
-        return gprint(String(text));
+        return gPrint(String(text));
     }
 
 private:

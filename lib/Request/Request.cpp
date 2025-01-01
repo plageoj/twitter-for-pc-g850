@@ -71,7 +71,7 @@ String Request::getParameterString()
     return temp.get();
 }
 
-String Request::getUrl(String protcol)
+String Request::getUrl(String protocol)
 {
-    return protcol + "://" + this->host + this->path;
+    return protocol + "://" + this->host + this->path;
 }
