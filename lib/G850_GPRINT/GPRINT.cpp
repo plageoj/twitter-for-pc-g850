@@ -13,9 +13,8 @@ File zth;
 
 bool GPRINT::begin(const char *ujistable, const char *hanfont, const char *zenfont, const char *zthtable)
 {
-    bool misakiresult = misaki.SPIFFS_Misaki_Init3F(ujistable, hanfont, zenfont);
-    zth = SPIFFS.open(zthtable, "r");
-    return zth && misakiresult;
+    misaki.SPIFFS_Misaki_Init3F(ujistable, hanfont, zenfont);
+    return SPIFFS.open(zthtable, "r");
 }
 
 void GPRINT::flowControl()
