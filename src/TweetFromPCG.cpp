@@ -1,9 +1,7 @@
 #include <Arduino.h>
 #include <WiFiMulti.h>
-#include <TimeLib.h>
 #include <Preferences.h>
 
-#include "NTP.cpp"
 #include <TwitterLib.h>
 #include <GPRINT.h>
 #include <KINPUT.h>
@@ -16,7 +14,7 @@
 WiFiMulti wifiMulti;
 
 // ツイート取得件数
-#define Display_MaxData 15
+#define Display_MaxData 3
 // 最大同時変換文節
 #define Max_Segments 15
 
@@ -32,16 +30,16 @@ kInput kanji(Max_Segments);
  */
 void renderTweet(Twitter::Tweet *tweet)
 {
+  Serial.print('@');
+  Serial.println(tweet->userScreenName);
+  Serial.println(tweet->tweetId);
+
   gp.gPrint(tweet->name);
   HWSerial.println("\xe2"); // テキストモード
   HWSerial.println(GP_NL);
   gp.gPrint(tweet->text);
   HWSerial.println(GP_END);
   HWSerial.flush();
-
-  Serial.print('@');
-  Serial.println(tweet->userScreenName);
-  Serial.println(tweet->tweetId);
 }
 
 String inputJapanese()
@@ -73,8 +71,21 @@ String readLineFromSerial()
   Serial.flush();
   while (!Serial.available())
     ;
-  String ret = Serial.readStringUntil('\r');
-  Serial.println(ret);
+  String ret = "";
+  while (true)
+  {
+    while (!Serial.available())
+      ;
+    char c = Serial.read();
+    if (c == '\r')
+    {
+      Serial.read(); // LFを読み飛ばす
+      Serial.println();
+      break;
+    }
+    Serial.print(c);
+    ret += c;
+  }
   return ret;
 }
 
@@ -87,25 +98,26 @@ String readLineFromSerial()
 void setNetwork()
 {
   Serial.print(F("SSID: "));
-  pref.putString("ssid", readLineFromSerial());
+  String ssid = readLineFromSerial();
   Serial.print(F("Password: "));
-  pref.putString("password", readLineFromSerial());
+  String password = readLineFromSerial();
+  if (ssid.isEmpty() || password.isEmpty())
+  {
+    Serial.println(F("Cancelled setting network up"));
+    return;
+  }
+  pref.putString("ssid", ssid);
+  pref.putString("password", password);
   ESP.restart();
 }
 
 void setAuthInfo()
 {
-  Serial.print(F("Consumer key: "));
-  pref.putString("consumer_key", readLineFromSerial());
+  Serial.print(F("RapidApi key: "));
+  pref.putString("rapid_api_key", readLineFromSerial());
 
-  Serial.print(F("Consumer secret: "));
-  pref.putString("consumer_secret", readLineFromSerial());
-
-  Serial.print(F("Access token: "));
-  pref.putString("access_token", readLineFromSerial());
-
-  Serial.print(F("Access token secret: "));
-  pref.putString("access_secret", readLineFromSerial());
+  Serial.print(F("Twttr Session: "));
+  pref.putString("twttr_session", readLineFromSerial());
 
   Serial.println(F("\nALL SET!\nNow proceeding to the normal startup…"));
 }
@@ -127,26 +139,26 @@ void setHashtag()
 
 void readCommand()
 {
-  String command;
+  char command;
 
   if (Serial.available())
   {
-    command = Serial.readStringUntil('\r');
+    command = Serial.read();
   }
 
-  if (command.indexOf('A') != -1)
+  if (command == 'A')
   {
     setAuthInfo();
   }
-  if (command.indexOf('W') != -1)
+  if (command == 'W')
   {
     setNetwork();
   }
-  if (command.indexOf('E') != -1)
+  if (command == 'E')
   {
     ESP.restart();
   }
-  if (command.indexOf('H') != -1)
+  if (command == 'H')
   {
     setHashtag();
   }
@@ -194,16 +206,13 @@ void setup()
   digitalWrite(PWR_LED, LOW);
   Serial.println(F("Connected!"));
 
-  getTime();
-  beginUdp();
-
-  tw.begin(
-      pref.getString("consumer_key").c_str(),
-      pref.getString("consumer_secret").c_str(),
-      pref.getString("access_token").c_str(),
-      pref.getString("access_secret").c_str());
+  tw.begin(pref.getString("rapid_api_key").c_str(),
+           pref.getString("twttr_session").c_str());
   // SPIFFSの都合上必ずGP->kanjiの順でロードせよ
-  gp.begin();
+  if (gp.begin())
+  {
+    Serial.println("GPrint loaded");
+  }
   Serial.println(kanji.begin());
 
   digitalWrite(PWR_LED, HIGH);
@@ -227,7 +236,7 @@ void loop()
     if (command.startsWith("U"))
     {
       command = command.substring(1);
-      tw.getUserTimeline(now(), command.c_str(), timeline);
+      tw.getUserTimeline(command.c_str(), timeline);
       currentTweet = 0;
       renderTweet(timeline);
       return;
@@ -239,7 +248,7 @@ void loop()
       String text = inputJapanese();
       if (!text.isEmpty())
       {
-        tw.search(now(), text.c_str(), timeline);
+        tw.search(text.c_str(), timeline);
         currentTweet = 0;
         renderTweet(timeline);
       }
@@ -291,7 +300,7 @@ void loop()
       if (!text.isEmpty())
       {
         command = text + pref.getString("hashtag", "") + " #G850Tw";
-        tw.post(now(), command.c_str());
+        // tw.post(command.c_str());
         gp.gPrint(command);
       }
       HWSerial.println(GP_END);
@@ -308,11 +317,11 @@ void loop()
         if (timeline[currentTweet].tweetId)
         {
           command = "@" + timeline[currentTweet].userScreenName + " " + command;
-          tw.post(now(), command.c_str(), timeline + currentTweet);
+          tw.post(command.c_str(), timeline + currentTweet);
         }
         else
         {
-          tw.post(now(), command.c_str());
+          tw.post(command.c_str());
         }
         gp.gPrint(command);
       }

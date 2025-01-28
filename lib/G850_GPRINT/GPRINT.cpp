@@ -14,7 +14,8 @@ File zth;
 bool GPrint::begin(const char *utf2JisTable, const char *hanFont, const char *zenFont, const char *z2hTable)
 {
     misaki.SPIFFS_Misaki_Init3F(utf2JisTable, hanFont, zenFont);
-    return SPIFFS.open(z2hTable, "r");
+    zth = SPIFFS.open(z2hTable, "r");
+    return zth;
 }
 
 void GPrint::flowControl()
@@ -25,17 +26,20 @@ void GPrint::flowControl()
         Serial.println("XOFF");
 #endif
         while (HWSerial.read() != 17)
-            delay(20);
+            delay(10);
 #ifdef DEBUG
         Serial.println("XON");
 #endif
     }
-    delay(10);
+    delay(2);
 }
 
 void GPrint::clearBuffer()
 {
     HWSerial.println();
+#ifdef DEBUG
+    Serial.print("*");
+#endif
     HWSerial.readStringUntil('-');
 }
 
@@ -126,18 +130,34 @@ void GPrint::gPrint(String utf8)
             uint32_t addr = (cpt[1] - 0x81) * 0x40 + cpt[2] - 0x80;
 
             bool hk = zth.seek(addr);
-            if (!hk) // テーブルに文字がない
-                break;
+            if (!hk)
+            { // テーブルに文字がない
+#ifdef DEBUG
+                Serial.print(F("T- "));
+#endif
+                cpt += 3;
+                continue;
+            }
             if (addr > 0x60 && prevMode != TEXT_MODE) // カタカナ
             {
                 HWSerial.println("\n\xe2"); // テキストモード
                 prevMode = TEXT_MODE;
+#ifdef DEBUG
+                Serial.print(F("\nカタカナ: "));
+#endif
             }
             else if (addr < 0x60 && prevMode != HIRAGANA_MODE) // ひらがな
             {
                 HWSerial.println("\n\xe1"); // ひらがなモード
                 prevMode = HIRAGANA_MODE;
+#ifdef DEBUG
+                Serial.print(F("\nひらがな: "));
+#endif
             }
+#ifdef DEBUG
+            Serial.print(addr, HEX);
+            Serial.print(F(" "));
+#endif
             char letter = zth.read();
             flowControl();
             switch (letter)
@@ -156,6 +176,11 @@ void GPrint::gPrint(String utf8)
                 HWSerial.print(letter);
                 outlen++;
             }
+#ifdef DEBUG
+            Serial.print(cpt[0]);
+            Serial.print(cpt[1]);
+            Serial.print(cpt[2]);
+#endif
             cpt += 3;
 
             if (outlen > 22)
@@ -175,8 +200,14 @@ void GPrint::gPrint(String utf8)
             {
                 HWSerial.println("\n\xe2");
                 prevMode = TEXT_MODE;
+#ifdef DEBUG
+                Serial.print(F("\nテキスト: "));
+#endif
             }
             cpt += putSingleByteChar(cpt);
+#ifdef DEBUG
+            Serial.println();
+#endif
         }
     }
 
@@ -193,6 +224,9 @@ int GPrint::putSingleByteChar(const char *str)
         HWSerial.write(*str);
         str++;
         outlen++;
+#ifdef DEBUG
+        Serial.print(*str);
+#endif
         if (outlen % 150 == 0)
         {
             clearBuffer();

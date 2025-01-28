@@ -2,6 +2,7 @@
 #define ESP32_TWITTER_LIB
 
 #include <Arduino.h>
+#include <WiFiClientSecure.h>
 #include "Request.h"
 class Twitter
 {
@@ -15,22 +16,26 @@ public:
   };
 
   Twitter();
-  void begin(const char *, const char *, const char *, const char *);
-  void getUserTimeline(uint32_t, const char *, Tweet *);
-  void search(uint32_t, const char *, Tweet *);
-  void post(uint32_t, const char *, Tweet *);
-  void post(uint32_t timestamp, const char *status)
+  void begin(const char *, const char *);
+  void getUserTimeline(const char *, Tweet *);
+  void search(const char *, Tweet *);
+  void post(const char *, Tweet *);
+  void post(const char *status)
   {
-    return post(timestamp, status, NULL);
+    return post(status, NULL);
   }
 
 private:
-  void TwitterAPI_HTTP_Request(uint32_t, Request *, Tweet *);
-  String make_parameter_str(Request *, uint32_t, uint32_t);
-  String make_sign_base_str(Request *, String);
-  String make_signature(String);
-  String make_OAuth_header(Request *, String);
-  void ssl_hmac_sha1(uint8_t *, int, const uint8_t *, int, unsigned char *);
+  void TwttrApiRequest(Request *, Tweet *);
+  /**
+   * TCP/IP 通信で取得した JSON データを解析し、Tweet 構造体に格納する
+   * @param *client TCP/IP クライアント
+   * @param *timeline Tweet 構造体の配列
+   * @returns 取得したツイート数
+   */
+  uint16_t parseTimeline(WiFiClient *, Tweet *);
+  void skipUntil(WiFiClient *, const char *);
+  String readJsonStringValue(WiFiClient *);
   String UTF16toUTF8(String str);
   std::string utf16_to_utf8(std::u16string const &);
 };
