@@ -37,8 +37,13 @@ String kInput::convertJapanese(String hiragana, ConversionResult *resultSet)
     {
         begin();
     }
-    client.print("GET /transliterate?langpair=ja-Hira|ja&text=" + urlEncode(hiragana) + " HTTP/1.1\r\n");
+    String path = "/transliterate?langpair=ja-Hira|ja&text=" + urlEncode(hiragana);
+    client.print("GET " + path + " HTTP/1.1\r\n");
     client.print("Host: www.google.com\r\n\r\n");
+
+#ifdef DEBUG
+    Serial.println("http://www.google.com" + path);
+#endif
 
     while (!client.available())
         ;
@@ -169,7 +174,7 @@ String kInput::htzConvert(String text)
         }
         else if (r >= 0xa1 && r <= 0xdf) // 仮名
         {
-            uint32_t adr = (r - 0xa1) * 3 + (hiraganaMode ? 0xc1 : 1);
+            uint32_t adr = (r - 0xa1) * 3 + (hiraganaMode ? 0xc0 : 0);
             htz.seek(adr);
             htz.readBytes(buf, 3);
 

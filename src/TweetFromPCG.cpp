@@ -300,7 +300,7 @@ void loop()
       if (!text.isEmpty())
       {
         command = text + pref.getString("hashtag", "") + " #G850Tw";
-        // tw.post(command.c_str());
+        tw.post(command.c_str());
         gp.gPrint(command);
       }
       HWSerial.println(GP_END);
